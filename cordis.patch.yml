@@ -150,13 +150,15 @@
                 config:
                   provider: spawn
                   toolName: subagent
-                  modelSelectionSettings: true
+                  modelSelection: true
+                  modelDiscovery: true
                   backgroundMode: continuable
               - id: tool-subagent-fork
                 name: '@deepseek-ai/dsh-tool-subagent'
                 config:
                   provider: fork
                   toolName: subagent_fork
+                  modelSelection: true
                   backgroundMode: continuable
               - id: tool-subagent-codex
                 name: '@deepseek-ai/dsh-tool-subagent'
@@ -311,13 +313,15 @@
                 config:
                   provider: spawn
                   toolName: subagent
-                  modelSelectionSettings: true
+                  modelSelection: true
+                  modelDiscovery: true
                   backgroundMode: continuable
               - id: tool-subagent-fork
                 name: '@deepseek-ai/dsh-tool-subagent'
                 config:
                   provider: fork
                   toolName: subagent_fork
+                  modelSelection: true
                   backgroundMode: continuable
               - id: tool-subagent-codex
                 name: '@deepseek-ai/dsh-tool-subagent'
