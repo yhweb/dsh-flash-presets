@@ -168,6 +168,7 @@ pnpm 会在该 profile 的 `pnpm-workspace.yaml` 里留下一行本包记录，`
 - **安装流程不碰会话**：`install.sh` / `install.ps1` 与插件启动都不扫描、不改写 `sessions/`。0.2.9 起**本包没有任何代码会写会话文件**（启动自愈 `lib/compat-heal.js` 已删除：它改 header 却不失效 DSH 的投影缓存，实际基本无效，还留下不释放的锁）。CI 里有断言：装一次、卸一次，`sessions/` 的校验和不变。
 - **桌面端 / 插件卡**：旧会话能不能打开，全看组合包里有没有 `flash-presets-alias` 这一行（只 inject `agentPresets` 的独立插件）。0.2.9 之前的插件卡没有它，请重装：`dsh plugin --profile desktop add github:LarryE135/dsh-flash-presets#v0.3.0`。`node scripts/doctor.mjs --profile desktop` 会直接告诉你有没有。
 - **脚本安装（`install.sh` / `install.ps1`）**：这条路没有别名层。如果升级前补丁里有 `flash-lean-ptc-v3-lite`，`merge-presets` 会额外保留一行兼容行（`order: 99`，标「勿选」），否则那些会话会 not-found。装过插件卡的 profile 会被脚本直接拒绝（`exit 4`），要叠加得显式 `--force`。
+- **脚本路径升级会移除旧卡**：托管块是整块替换的，0.2.5 时代的三卡（`flash-lean-ptc-v1` / `-v2` / `-v3`）升级后只剩 `flash-lean-ptc-v3` 与 `-balance`。这条路径**没有旧 id 兜底**（别名层只随插件卡发行），引用 `-v1` / `-v2` 的旧会话升级后会 `agent-preset/not-found`。升级脚本会打印警告；需要旧会话继续可打开，请改装插件卡（`dsh plugin --profile <名称> add dsh-flash-presets`），它带兼容层。
 - 装过独立包 `dsh-plan-mode-ui` 的，先 `dsh plugin remove dsh-plan-mode-ui`，否则计划模式会被注入两次。
 - 如果 profile 的 `selectedDefault` 指向 `flash-lean-ptc-v3-lite`，建议改成 `flash-lean-ptc-v3`（留在旧值也能被兼容层解析）。
 
@@ -178,6 +179,14 @@ pnpm 会在该 profile 的 `pnpm-workspace.yaml` 里留下一行本包记录，`
 - 入口在输入框左侧，档位为 off / light（原生计划模式） / full，与预设设置相互独立。
 - 默认推荐 light。在 n = 3、7 项验收的对比中，两档都是 3/3 全过，full 的 token 多约 17%（中位 40.2 k vs 34.3 k）、耗时多约 33%（196 s vs 147 s，[变更日志](docs/CHANGELOG.md)）。
 - 不用时在卡片里关掉这个组件即可，预设行为不受影响。
+
+## 交付门（可选组件，默认关闭）
+
+同一张卡里还有交付门 `delivery-gate`。它不用规则文本，而是**在回合收尾时替你跑验收**：工作区里存在 `verify.sh` 就自动执行一次，通过才放行；不通过就把退出码和输出的最后一段回灌给模型，同一会话最多两次，让它在「不许交付」的前提下继续修。
+
+- 为什么需要：P15654 的实测里，三份实现都在结束语里**如实**写了「17–19 超时 / 未覆盖」，然后照常交付 —— 缺的不是自述，是「不达标就不许结束」。
+- 打开方式：把该行的 `enabled` 改成 `true`（`cordis.patch.yml` 末段的 `delivery-gate` 行），或临时设 `DSH_DELIVERY_GATE=1`；关掉用 `enabled: false` 或 `DSH_DELIVERY_GATE=0`。
+- 脚本约定：默认找工作区根目录的 `verify.sh`（可用 `scripts` 配置改），超时按失败处理；它只读回退出码与输出尾部，不改你的文件。
 
 ## 注意事项
 
@@ -203,6 +212,7 @@ node scripts/diag-preset-load.mjs --profile desktop   # GUI 里预设卡片显�
 | `js-yaml` 报 `unknown tag` | 文件里还有 `!!js` 标签 | `node scripts/doctor.mjs --fix`（先备份） |
 | 预设根本没出现 | DSH 低于 0.2.1-rc.5，或装错了 profile | 升级 DSH，或用 `--profile` 指对 |
 | 升级 DSH 后预设突然消失 | DSH 已超出 `engines` 上限 `<0.2.3-0`，插件在加载时被跳过 | 升级本包；确需强行加载可用 `dsh plugin allow-version` 自担风险放行 |
+| 工具凭空少了几个（例如 `glob` / `grep`），但没有任何报错 | profile 里某个 `@deepseek-ai/*` 副本与本机 dsh 版本对不上，dsh 挂载时**静默跳过**那一行 | `node scripts/doctor.mjs --profile <名字>` 第 9 项会列出来并给修法 |
 
 预设补丁只定义 agent 侧的插件集合，不碰工作区选择器、目录选择器、终端这类 GUI 组件。如果装完后出现与预设无关的界面异常，请把 doctor 输出和浏览器控制台报错一起贴到 [issue](https://github.com/LarryE135/dsh-flash-presets/issues)。
 
@@ -232,6 +242,11 @@ npm run verify          # 合成一致性、YAML、预设结构、文本审计�
 npm run bench:office    # 办公基准的结构与完整性校验（只在仓库里可用，npm 包不含 benchmarks/）
 bash scripts/selftest.sh
 ```
+
+> 这三条都要求**完整克隆**（`git clone` 下来的仓库）。npm 发行包只带运行需要的那部分脚本与两份预设：
+> `scripts/` 里有一部分文件、`benchmarks/`、`tools/`、插件源码与测试都不随包，所以包内
+> `npm run verify`、`prepublishOnly`、`bench:*` 等 15 个 script 会因缺文件失败 —— 那是发行包本来
+> 就不含开发面，不是坏了。要在装好的包旁边跑这些，请另克隆仓库。
 
 `cordis.patch.yml` 由 `presets/*.patch.yml` 合成，请勿手改，CI 会断言两者一致。README 里的实测表由 `docs/bench-office-results.json` 生成。贡献方式见 [CONTRIBUTING](https://github.com/LarryE135/dsh-flash-presets/blob/main/CONTRIBUTING.md)。
 
